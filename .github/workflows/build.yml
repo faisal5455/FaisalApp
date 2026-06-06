@@ -39,10 +39,23 @@ jobs:
           name: app-release
           path: app/build/outputs/apk/release/app-release.apk
 
+      # If the build branch was deleted while this run was building (the user
+      # deleted the project), skip publishing so we don't re-create the release.
+      - name: Check build branch still exists
+        id: branch_check
+        if: startsWith(github.ref_name, 'app-')
+        run: |
+          if git ls-remote --exit-code --heads origin "${{ github.ref_name }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Branch ${{ github.ref_name }} was deleted; skipping release."
+          fi
+
       # For builder-triggered branches (app-*), publish the APK as a Release
       # asset so the builder app can fetch a stable, public download URL.
       - name: Publish APK as Release
-        if: startsWith(github.ref_name, 'app-')
+        if: startsWith(github.ref_name, 'app-') && steps.branch_check.outputs.exists == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
