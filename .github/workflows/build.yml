@@ -29,15 +29,15 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+      - name: Build release APK
+        run: ./gradlew :app:assembleRelease --stacktrace
 
       # Always keep the artifact (handy for PRs / main builds).
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: app-release
+          path: app/build/outputs/apk/release/app-release.apk
 
       # For builder-triggered branches (app-*), publish the APK as a Release
       # asset so the builder app can fetch a stable, public download URL.
@@ -48,5 +48,5 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           body: "Automated build from the web2app builder for branch ${{ github.ref_name }} (commit ${{ github.sha }})."
-          files: app/build/outputs/apk/debug/app-debug.apk
+          files: app/build/outputs/apk/release/app-release.apk
           make_latest: "false"
