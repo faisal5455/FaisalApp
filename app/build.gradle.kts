@@ -32,9 +32,25 @@ android {
         manifestPlaceholders["appLabel"] = cfgAppName
     }
 
+    // Fixed signing key committed to the repo so every cloud build is signed with
+    // the SAME key. Without this, each CI run regenerates the debug keystore →
+    // different signature → "package conflicts with an existing package" on update.
+    signingConfigs {
+        create("shared") {
+            storeFile = file("signing/web2app.keystore")
+            storePassword = "android"
+            keyAlias = "web2app"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("shared")
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("shared")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
