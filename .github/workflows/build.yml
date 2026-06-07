@@ -43,6 +43,33 @@ jobs:
         if: steps.target.outputs.value != 'key'
         run: chmod +x gradlew
 
+      # If this project already generated a signing key, pull it from the release
+      # and expose it to Gradle so the APK/AAB is signed with the user's own key.
+      - name: Fetch project signing key
+        id: signing
+        if: (steps.target.outputs.value == 'apk' || steps.target.outputs.value == 'aab') && startsWith(github.ref_name, 'app-')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release download "${{ github.ref_name }}" \
+               -p keystore.jks -p keystore-credentials.txt --clobber 2>/dev/null \
+             && [ -f keystore.jks ] && [ -f keystore-credentials.txt ]; then
+            ALIAS=$(grep -i '^Key alias' keystore-credentials.txt | sed 's/.*: *//' | tr -d '[:space:]')
+            STOREPASS=$(grep -i '^Store password' keystore-credentials.txt | sed 's/.*: *//' | tr -d '[:space:]')
+            KEYPASS=$(grep -i '^Key password' keystore-credentials.txt | sed 's/.*: *//' | tr -d '[:space:]')
+            {
+              echo "SIGN_STORE_FILE=$PWD/keystore.jks"
+              echo "SIGN_STORE_PASSWORD=$STOREPASS"
+              echo "SIGN_KEY_ALIAS=$ALIAS"
+              echo "SIGN_KEY_PASSWORD=$KEYPASS"
+            } >> "$GITHUB_ENV"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "Signing with the project's generated key (alias: $ALIAS)."
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "No project key found; using the default signing key."
+          fi
+
       - name: Build release APK
         if: steps.target.outputs.value == 'apk'
         run: ./gradlew :app:assembleRelease --stacktrace
@@ -50,6 +77,16 @@ jobs:
       - name: Build release AAB
         if: steps.target.outputs.value == 'aab'
         run: ./gradlew :app:bundleRelease --stacktrace
+
+      # Record which certificate signed the APK so the user can verify the key.
+      - name: Record signing fingerprint
+        if: steps.target.outputs.value == 'apk' && startsWith(github.ref_name, 'app-')
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk \
+            | grep -i "SHA-256" > signing-info.txt || true
+          echo "Signed by project key: ${{ steps.signing.outputs.signed }}" >> signing-info.txt
+          cat signing-info.txt
 
       # Generate a fresh upload keystore with auto-generated credentials and a
       # plain-text file describing them, so the user can download both.
@@ -106,7 +143,8 @@ jobs:
         run: |
           mkdir -p dist
           case "${{ steps.target.outputs.value }}" in
-            apk) cp app/build/outputs/apk/release/app-release.apk dist/ ;;
+            apk) cp app/build/outputs/apk/release/app-release.apk dist/
+                 [ -f signing-info.txt ] && cp signing-info.txt dist/ || true ;;
             aab) cp app/build/outputs/bundle/release/app-release.aab dist/ ;;
             key) cp keystore.jks keystore-credentials.txt dist/ ;;
           esac

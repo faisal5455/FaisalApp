@@ -37,10 +37,22 @@ android {
     // over a prior one fails with "package conflicts with an existing package".
     signingConfigs {
         create("release") {
-            storeFile = file("signing/web2app-release.keystore")
-            storePassword = "web2app"
-            keyAlias = "web2app"
-            keyPassword = "web2app"
+            // When the builder generated a per-project signing key, CI downloads it
+            // and points these env vars at it, so the build is signed with the user's
+            // own key. Otherwise fall back to the shared default keystore (keeps
+            // rebuilds installable over each other for previews / main builds).
+            val envStore = System.getenv("SIGN_STORE_FILE")
+            if (!envStore.isNullOrBlank() && file(envStore).exists()) {
+                storeFile = file(envStore)
+                storePassword = System.getenv("SIGN_STORE_PASSWORD")
+                keyAlias = System.getenv("SIGN_KEY_ALIAS")
+                keyPassword = System.getenv("SIGN_KEY_PASSWORD")
+            } else {
+                storeFile = file("signing/web2app-release.keystore")
+                storePassword = "web2app"
+                keyAlias = "web2app"
+                keyPassword = "web2app"
+            }
         }
     }
 
