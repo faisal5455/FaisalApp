@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android App
 
 on:
   push:
@@ -17,23 +17,71 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The builder commits a `build_target` file (apk | aab | key) to tell this
+      # workflow what to produce. Anything else (main, PRs) defaults to apk.
+      - name: Resolve build target
+        id: target
+        run: |
+          T=$(cat build_target 2>/dev/null | tr -d '[:space:]')
+          T=${T:-apk}
+          case "$T" in apk|aab|key) ;; *) T=apk ;; esac
+          echo "value=$T" >> "$GITHUB_OUTPUT"
+          echo "Build target: $T"
+
       - name: Set up JDK 17
+        if: steps.target.outputs.value != 'key'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Android SDK
+        if: steps.target.outputs.value != 'key'
         uses: android-actions/setup-android@v3
 
       - name: Grant execute permission for gradlew
+        if: steps.target.outputs.value != 'key'
         run: chmod +x gradlew
 
       - name: Build release APK
+        if: steps.target.outputs.value == 'apk'
         run: ./gradlew :app:assembleRelease --stacktrace
 
-      # Always keep the artifact (handy for PRs / main builds).
+      - name: Build release AAB
+        if: steps.target.outputs.value == 'aab'
+        run: ./gradlew :app:bundleRelease --stacktrace
+
+      # Generate a fresh upload keystore with auto-generated credentials and a
+      # plain-text file describing them, so the user can download both.
+      - name: Generate keystore
+        if: steps.target.outputs.value == 'key'
+        run: |
+          APPNAME=$(jq -r '.appName // "WebToApp"' app/src/main/assets/app_settings.json 2>/dev/null || echo WebToApp)
+          ALIAS=upload
+          STOREPASS=$(openssl rand -hex 12)
+          KEYPASS=$STOREPASS
+          keytool -genkeypair -v \
+            -keystore keystore.jks \
+            -alias "$ALIAS" \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass "$STOREPASS" -keypass "$KEYPASS" \
+            -dname "CN=$APPNAME, OU=Mobile, O=WebToApp, L=NA, ST=NA, C=US"
+          {
+            echo "Keystore credentials for $APPNAME"
+            echo "===================================="
+            echo "Keystore file : keystore.jks"
+            echo "Key alias     : $ALIAS"
+            echo "Store password: $STOREPASS"
+            echo "Key password  : $KEYPASS"
+            echo "Validity      : 10000 days (RSA 2048)"
+            echo ""
+            echo "Keep this file safe - you need this exact keystore and these"
+            echo "passwords to publish updates of your app on Google Play."
+          } > keystore-credentials.txt
+
+      # Keep the APK as a CI artifact for non-builder builds (main / PRs).
       - name: Upload APK artifact
+        if: steps.target.outputs.value == 'apk'
         uses: actions/upload-artifact@v4
         with:
           name: app-release
@@ -52,14 +100,26 @@ jobs:
             echo "Branch ${{ github.ref_name }} was deleted; skipping release."
           fi
 
-      # For builder-triggered branches (app-*), publish the APK as a Release
-      # asset so the builder app can fetch a stable, public download URL.
-      - name: Publish APK as Release
+      # Gather the produced file(s) for this target into a single folder.
+      - name: Collect artifacts
+        if: startsWith(github.ref_name, 'app-') && steps.branch_check.outputs.exists == 'true'
+        run: |
+          mkdir -p dist
+          case "${{ steps.target.outputs.value }}" in
+            apk) cp app/build/outputs/apk/release/app-release.apk dist/ ;;
+            aab) cp app/build/outputs/bundle/release/app-release.aab dist/ ;;
+            key) cp keystore.jks keystore-credentials.txt dist/ ;;
+          esac
+          ls -la dist
+
+      # Publish the artifact(s) onto the project's release (tag == branch name).
+      # Assets accumulate, so one release holds the app's APK, AAB and keystore.
+      - name: Publish to release
         if: startsWith(github.ref_name, 'app-') && steps.branch_check.outputs.exists == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           body: "Automated build from the web2app builder for branch ${{ github.ref_name }} (commit ${{ github.sha }})."
-          files: app/build/outputs/apk/release/app-release.apk
+          files: dist/*
           make_latest: "false"
