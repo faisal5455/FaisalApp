@@ -43,17 +43,14 @@ jobs:
         if: steps.target.outputs.value != 'key'
         run: chmod +x gradlew
 
-      # If this project already generated a signing key, pull it from the release
-      # and expose it to Gradle so the APK/AAB is signed with the user's own key.
-      - name: Fetch project signing key
+      # The builder pushes the project's keystore + credentials into the branch for
+      # APK/AAB builds (the key is no longer hosted in the release). If present in
+      # the checked-out tree, expose it to Gradle so the artifact is signed with it.
+      - name: Load project signing key
         id: signing
         if: (steps.target.outputs.value == 'apk' || steps.target.outputs.value == 'aab') && startsWith(github.ref_name, 'app-')
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release download "${{ github.ref_name }}" \
-               -p keystore.jks -p keystore-credentials.txt --clobber 2>/dev/null \
-             && [ -f keystore.jks ] && [ -f keystore-credentials.txt ]; then
+          if [ -f keystore.jks ] && [ -f keystore-credentials.txt ]; then
             ALIAS=$(grep -i '^Key alias' keystore-credentials.txt | sed 's/.*: *//' | tr -d '[:space:]')
             STOREPASS=$(grep -i '^Store password' keystore-credentials.txt | sed 's/.*: *//' | tr -d '[:space:]')
             KEYPASS=$(grep -i '^Key password' keystore-credentials.txt | sed 's/.*: *//' | tr -d '[:space:]')
@@ -64,10 +61,10 @@ jobs:
               echo "SIGN_KEY_PASSWORD=$KEYPASS"
             } >> "$GITHUB_ENV"
             echo "signed=true" >> "$GITHUB_OUTPUT"
-            echo "Signing with the project's generated key (alias: $ALIAS)."
+            echo "Signing with the project's key pushed by the builder (alias: $ALIAS)."
           else
             echo "signed=false" >> "$GITHUB_OUTPUT"
-            echo "No project key found; using the default signing key."
+            echo "No project key pushed; using the default signing key."
           fi
 
       - name: Build release APK
