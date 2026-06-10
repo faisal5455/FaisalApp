@@ -1,20 +1,35 @@
 package com.web2app
 
+import android.animation.ObjectAnimator
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Outline
+import android.graphics.drawable.ClipDrawable
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.ContextThemeWrapper
+import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
+import android.view.ViewOutlineProvider
+import android.view.animation.LinearInterpolator
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.ProgressBar
 import androidx.appcompat.app.AppCompatActivity
+import com.web2app.data.AppRepository
+import com.web2app.models.Splash
 import com.web2app.models.parseAppConfig
 
 /**
- * Launcher entry point. Reads the app configuration from assets/app_settings.json,
- * shows the configured splash screen (background colour + image + loader) for a
- * short moment, then opens [MainActivity].
+ * Launcher entry point. Reads the app configuration (from the builder's storage when
+ * previewing, else assets/app_settings.json), shows the configured splash screen
+ * (background colour + image + loader) for a short moment, then opens the onboarding
+ * screens (when enabled) or [MainActivity].
  */
 class SplashActivity : AppCompatActivity() {
 
@@ -22,35 +37,139 @@ class SplashActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_splash)
 
-        val config = parseAppConfig(readJson(this, "app_settings.json"))
+        // Preview mode forwards an app id; standalone builds read the bundled assets.
+        val appId = intent.getStringExtra(MainActivity.EXTRA_APP_ID)
+        val config = if (appId != null) {
+            AppRepository(this).getApp(appId)
+        } else {
+            parseAppConfig(readJson(this, "app_settings.json"))
+        }
+        val splash = config?.splash ?: Splash()
 
         val root = findViewById<View>(R.id.splashRoot)
         val image = findViewById<ImageView>(R.id.splashImage)
-        val loader = findViewById<ProgressBar>(R.id.splashLoader)
+        val loaderHolder = findViewById<FrameLayout>(R.id.splashLoaderHolder)
 
-        // Background colour
-        root.setBackgroundColor(safeColor(config.splash.color, Color.WHITE))
+        // Background: plain colour, or a top→bottom gradient from it to white.
+        val bgColor = safeColor(splash.color, Color.WHITE)
+        root.background = if (splash.gradient) {
+            GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(bgColor, Color.WHITE))
+        } else {
+            ColorDrawable(bgColor)
+        }
 
-        // Splash image: configured base64 splash image, else base64 app icon,
-        // else fall back to the launcher icon drawable.
-        val imageData = config.splash.image.takeIf { it.isNotBlank() }
-            ?: config.appIcon.takeIf { it.isNotBlank() }
+        // Splash image (fall back to the app icon, then the launcher drawable).
+        val imageData = splash.image.takeIf { it.isNotBlank() } ?: config?.appIcon
         val bitmap = imageData?.let { Base64ImageUtil.base64ToBitmap(it) }
         if (bitmap != null) {
             image.setImageBitmap(bitmap)
         } else {
             image.setImageResource(R.drawable.app_icon)
         }
+        val iconPx = dp(splash.iconSize.coerceIn(48, 240))
+        image.layoutParams = image.layoutParams.apply { width = iconPx; height = iconPx }
+        val radiusPx = dp(splash.iconCorner.coerceIn(0, 120)).toFloat()
+        image.outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: Outline) {
+                outline.setRoundRect(0, 0, view.width, view.height, radiusPx)
+            }
+        }
+        image.clipToOutline = radiusPx > 0f
         image.visibility = View.VISIBLE
 
-        loader.visibility = if (config.splash.loader == 0) View.GONE else View.VISIBLE
+        // Loader: built programmatically so its style + size can vary.
+        (loaderHolder.layoutParams as? ViewGroup.MarginLayoutParams)?.topMargin =
+            dp(splash.gap.coerceIn(0, 120))
+        loaderHolder.removeAllViews()
+        val themeColor = safeColor(config?.themeColor, DEFAULT_THEME)
+        val sizePx = dp(splash.size.coerceIn(16, 120))
+        val loader = makeLoader(splash.loader, sizePx, themeColor)
+        if (loader != null) loaderHolder.addView(loader)
+
+        // The gradient-fill loader is a 3s determinate progress; hold long enough for it
+        // to visibly complete before navigating on.
+        val holdMs = if (splash.loader == LOADER_GRADIENT_FILL) GRADIENT_FILL_MS else SPLASH_DURATION_MS
 
         Handler(Looper.getMainLooper()).postDelayed({
             if (isFinishing) return@postDelayed
-            startActivity(Intent(this, MainActivity::class.java))
+            val showOnboarding = config?.showOnboarding == true && config.onboarding.isNotEmpty()
+            val next = if (showOnboarding) OnboardingActivity::class.java else MainActivity::class.java
+            startActivity(Intent(this, next).putExtra(MainActivity.EXTRA_APP_ID, appId))
             finish()
-        }, SPLASH_DURATION_MS)
+        }, holdMs)
     }
+
+    /** Builds a [ProgressBar] for the chosen [style], sized [sizePx] px, or null for "None". */
+    private fun makeLoader(style: Int, sizePx: Int, themeColor: Int): ProgressBar? {
+        if (style == LOADER_GRADIENT_FILL) return makeGradientFillLoader(sizePx, themeColor)
+        val styleAttr = when (style) {
+            1 -> android.R.attr.progressBarStyle
+            2 -> android.R.attr.progressBarStyleHorizontal
+            3 -> android.R.attr.progressBarStyleLarge
+            4 -> android.R.attr.progressBarStyleSmall
+            else -> return null // 0 = None
+        }
+        val bar = ProgressBar(ContextThemeWrapper(this, 0), null, styleAttr).apply {
+            isIndeterminate = true
+        }
+        val w = if (style == 2) dp(220) else sizePx
+        bar.layoutParams = FrameLayout.LayoutParams(w, if (style == 2) ViewGroup.LayoutParams.WRAP_CONTENT else sizePx)
+        return bar
+    }
+
+    /**
+     * A determinate, pill-shaped bar whose fill is a horizontal gradient of [themeColor].
+     * Animates 0→100% over [GRADIENT_FILL_MS]. The size slider drives the bar width.
+     */
+    private fun makeGradientFillLoader(sizePx: Int, themeColor: Int): ProgressBar {
+        val heightPx = (sizePx * 0.22f).toInt().coerceAtLeast(dp(7))
+        val widthPx = (sizePx * 4)
+        val radius = heightPx / 2f
+
+        val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = false
+            max = 1000
+            progressDrawable = gradientFillDrawable(radius, themeColor)
+            layoutParams = FrameLayout.LayoutParams(widthPx, heightPx)
+        }
+        ObjectAnimator.ofInt(bar, "progress", 0, bar.max).apply {
+            duration = GRADIENT_FILL_MS
+            interpolator = LinearInterpolator()
+            start()
+        }
+        return bar
+    }
+
+    /** Track (faint) + clipped gradient fill, both pill-rounded to [radius]. */
+    private fun gradientFillDrawable(radius: Float, themeColor: Int) = LayerDrawable(
+        arrayOf(
+            GradientDrawable().apply {
+                cornerRadius = radius
+                setColor(lighten(themeColor, 0.82f))
+            },
+            ClipDrawable(
+                GradientDrawable(
+                    GradientDrawable.Orientation.LEFT_RIGHT,
+                    intArrayOf(lighten(themeColor, 0.45f), themeColor)
+                ).apply { cornerRadius = radius },
+                Gravity.START,
+                ClipDrawable.HORIZONTAL
+            )
+        )
+    ).apply {
+        setId(0, android.R.id.background)
+        setId(1, android.R.id.progress)
+    }
+
+    /** Blends [color] toward white by [amount] (0..1). */
+    private fun lighten(color: Int, amount: Float): Int = Color.rgb(
+        (Color.red(color) + (255 - Color.red(color)) * amount).toInt(),
+        (Color.green(color) + (255 - Color.green(color)) * amount).toInt(),
+        (Color.blue(color) + (255 - Color.blue(color)) * amount).toInt()
+    )
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
 
     private fun safeColor(hex: String?, default: Int): Int {
         return try {
@@ -62,5 +181,10 @@ class SplashActivity : AppCompatActivity() {
 
     companion object {
         private const val SPLASH_DURATION_MS = 1800L
+        /** Hold time + animation duration for the gradient-fill loader. */
+        private const val GRADIENT_FILL_MS = 3000L
+        /** Loader style index for the gradient-fill bar. */
+        private const val LOADER_GRADIENT_FILL = 5
+        private const val DEFAULT_THEME = 0xFF5B5BD6.toInt()
     }
 }

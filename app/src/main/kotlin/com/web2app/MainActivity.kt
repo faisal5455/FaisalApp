@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.webkit.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -28,6 +29,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bottomNav: BottomNavigationView
     private lateinit var noInternetView: View
 
+    /** Holder for the configured page loader; null/false means use the default spinner. */
+    private var pageLoaderHolder: View? = null
+    private var useCustomPageLoader = false
+
     private lateinit var permissionsHandler: PermissionsHandler
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -36,6 +41,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_APP_ID = "extra_app_id"
+        private const val DEFAULT_THEME = 0xFF5B5BD6.toInt()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,6 +75,7 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { finish() }
         }
 
+        setupPageLoader()
         setupWebView()
         setupBottomNav()
         setupConnectivity()
@@ -81,6 +88,42 @@ class MainActivity : AppCompatActivity() {
         } else {
             loadCurrentUrl()
         }
+    }
+
+    // ─── Page loader ─────────────────────────────────────────────────────────
+
+    /**
+     * Builds the configured in-page loader into [R.id.pageLoaderHolder]. When the page
+     * loader isn't enabled we fall back to the default centered [progressBar].
+     */
+    private fun setupPageLoader() {
+        val holder = findViewById<FrameLayout>(R.id.pageLoaderHolder)
+        pageLoaderHolder = holder
+        val pl = appConfig.pageLoader
+        if (!pl.enabled) {
+            useCustomPageLoader = false
+            return
+        }
+        val theme = safeParseColor(appConfig.themeColor, DEFAULT_THEME)
+        val icon = Base64ImageUtil.base64ToBitmap(appConfig.appIcon)
+        val opts = PageLoaderViews.Opts(
+            card = pl.card,
+            cardColor = safeParseColor(pl.cardColor, Color.WHITE),
+            cardOpacity = pl.cardOpacity,
+            cardRadius = pl.cardRadius,
+            gap = pl.gap,
+            loaderWidth = pl.loaderWidth,
+            loaderThickness = pl.loaderThickness
+        )
+        holder.removeAllViews()
+        holder.addView(PageLoaderViews.create(this, pl.style, icon, theme, opts))
+        useCustomPageLoader = true
+    }
+
+    /** Shows/hides whichever loader is in use (configured page loader or the default). */
+    private fun showLoading(show: Boolean) {
+        val target = if (useCustomPageLoader) pageLoaderHolder else progressBar
+        target?.visibility = if (show) View.VISIBLE else View.GONE
     }
 
     // ─── WebView ───────────────────────────────────────────────────────────────
@@ -129,11 +172,11 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                progressBar.visibility = View.VISIBLE
+                showLoading(true)
             }
 
             override fun onPageFinished(view: WebView, url: String) {
-                progressBar.visibility = View.GONE
+                showLoading(false)
                 swipeRefresh.isRefreshing = false
             }
         }

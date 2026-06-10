@@ -20,14 +20,83 @@ data class AppConfig(
     val permissions: List<Int> = listOf(),
     val pushNotification: Boolean = false,
     val playStore: Boolean = false,
-    val appStore: Boolean = false
+    val appStore: Boolean = false,
+    /**
+     * Created via the Pro flow. Pro apps expose APK/AAB/keystore builds (each
+     * costing coins) in the Build Center; non-Pro apps only get the free APK build.
+     */
+    val pro: Boolean = false,
+    /** Show intro/onboarding screens before the web view on first launch. */
+    val showOnboarding: Boolean = false,
+    val onboarding: List<OnboardingScreen> = listOf(),
+    /** Onboarding layout style (0 = Bottom card, 1 = Centered). */
+    val onboardingStyle: Int = 0,
+    /** Use a gradient background on the onboarding screens. */
+    val onboardingGradient: Boolean = false,
+    /** Colour of the onboarding title + description text. */
+    val onboardingTextColor: String = "#111827",
+    /** Accent colour used for the gradient/coloured panel + controls. */
+    val onboardingGradientColor: String = "#5B5BD6",
+    /** Bottom-card background colour (Bottom-card style only). */
+    val onboardingCardColor: String = "#FFFFFF",
+    /** Onboarding image shape: 0 = Circle, 1 = Rounded (15dp), 2 = None. */
+    val onboardingImageShape: Int = 0,
+    /** Loader shown while web pages load inside the WebView. */
+    val pageLoader: PageLoader = PageLoader()
+)
+
+data class PageLoader(
+    /** When false, a plain circular spinner is used (legacy default behaviour). */
+    val enabled: Boolean = false,
+    /**
+     * Loader style:
+     * 0 = Circular, 1 = Linear bar (both free),
+     * 2 = Branding ring (app icon inside a circular spinner),
+     * 3 = Branding bar (app icon above a linear bar).
+     * Styles 2–3 are Pro only and honour the branding fields below.
+     */
+    val style: Int = 0,
+    /** Branding only: wrap the loader in a rounded card. */
+    val card: Boolean = true,
+    /** Branding card background color. */
+    val cardColor: String = "#FFFFFF",
+    /** Branding card opacity, 0–100 percent. */
+    val cardOpacity: Int = 100,
+    /** Branding card corner radius, in dp. */
+    val cardRadius: Int = 12,
+    /** Branding: space between the icon and the loader, in dp. */
+    val gap: Int = 12,
+    /** Branding: loader width/diameter, in dp. */
+    val loaderWidth: Int = 78,
+    /** Branding: loader stroke thickness (ring band / bar height), in dp. */
+    val loaderThickness: Int = 7
+)
+
+data class OnboardingScreen(
+    val image: String = "",
+    val title: String = "",
+    val description: String = ""
 )
 
 data class Splash(
     val color: String = "#FFFFFF",
+    /** When true, the background is a top→bottom gradient from [color] to white (like the intro). */
+    val gradient: Boolean = false,
     val image: String = "",
-    val size: Int = 30,
-    val loader: Int = 0
+    /** Loader size in dp. */
+    val size: Int = 48,
+    /**
+     * Loader style: 0 = None, 1 = Circle, 2 = Horizontal bar, 3 = Large circle,
+     * 4 = Small circle, 5 = Gradient fill (determinate bar that fills over 3s with a
+     * gradient of the theme color).
+     */
+    val loader: Int = 0,
+    /** App icon size on the splash, in dp. */
+    val iconSize: Int = 120,
+    /** App icon corner radius on the splash, in dp (0 = square). */
+    val iconCorner: Int = 15,
+    /** Vertical space between the icon and the loader, in dp. */
+    val gap: Int = 28
 )
 
 data class TabSettings(
@@ -73,10 +142,44 @@ fun parseAppConfig(json: JSONObject): AppConfig {
     val splashObj = json.optJSONObject("splash") ?: JSONObject()
     val splash = Splash(
         color = splashObj.optString("color", "#ffffff"),
+        gradient = splashObj.optBoolean("gradient", false),
         image = splashObj.optString("image", ""),
-        size = splashObj.optInt("size", 30),
-        loader = splashObj.optInt("loader", 0)
+        size = splashObj.optInt("size", 48),
+        loader = splashObj.optInt("loader", 0),
+        iconSize = splashObj.optInt("iconSize", 120),
+        iconCorner = splashObj.optInt("iconCorner", 15),
+        gap = splashObj.optInt("gap", 28)
     )
+
+    // Parse page loader
+    val plObj = json.optJSONObject("pageLoader") ?: JSONObject()
+    val pageLoader = PageLoader(
+        enabled = plObj.optBoolean("enabled", false),
+        style = plObj.optInt("style", 0),
+        card = plObj.optBoolean("card", true),
+        cardColor = plObj.optString("cardColor", "#FFFFFF"),
+        cardOpacity = plObj.optInt("cardOpacity", 100),
+        cardRadius = plObj.optInt("cardRadius", 12),
+        gap = plObj.optInt("gap", 12),
+        loaderWidth = plObj.optInt("loaderWidth", 78),
+        loaderThickness = plObj.optInt("loaderThickness", 7)
+    )
+
+    // Parse onboarding screens
+    val onboarding = mutableListOf<OnboardingScreen>()
+    val onbArray = json.optJSONArray("onboarding")
+    if (onbArray != null) {
+        for (i in 0 until onbArray.length()) {
+            val o = onbArray.optJSONObject(i) ?: continue
+            onboarding.add(
+                OnboardingScreen(
+                    image = o.optString("image", ""),
+                    title = o.optString("title", ""),
+                    description = o.optString("description", "")
+                )
+            )
+        }
+    }
 
     // Parse permissions array
     val permissionsArray = json.optJSONArray("permissions")
@@ -105,7 +208,17 @@ fun parseAppConfig(json: JSONObject): AppConfig {
         permissions = permissions,
         pushNotification = json.optBoolean("pushNotification", false),
         playStore = json.optBoolean("playStore", false),
-        appStore = json.optBoolean("appStore", false)
+        appStore = json.optBoolean("appStore", false),
+        pro = json.optBoolean("pro", false),
+        showOnboarding = json.optBoolean("showOnboarding", false),
+        onboarding = onboarding,
+        onboardingStyle = json.optInt("onboardingStyle", 0),
+        onboardingGradient = json.optBoolean("onboardingGradient", false),
+        onboardingTextColor = json.optString("onboardingTextColor", "#111827"),
+        onboardingGradientColor = json.optString("onboardingGradientColor", "#5B5BD6"),
+        onboardingCardColor = json.optString("onboardingCardColor", "#FFFFFF"),
+        onboardingImageShape = json.optInt("onboardingImageShape", 0),
+        pageLoader = pageLoader
     )
 }
 
@@ -126,9 +239,13 @@ fun appConfigToJson(config: AppConfig): JSONObject {
 
     val splashObj = JSONObject()
     splashObj.put("color", config.splash.color)
+    splashObj.put("gradient", config.splash.gradient)
     splashObj.put("image", config.splash.image)
     splashObj.put("size", config.splash.size)
     splashObj.put("loader", config.splash.loader)
+    splashObj.put("iconSize", config.splash.iconSize)
+    splashObj.put("iconCorner", config.splash.iconCorner)
+    splashObj.put("gap", config.splash.gap)
     obj.put("splash", splashObj)
 
     obj.put("showTabbar", config.showTabbar)
@@ -158,5 +275,35 @@ fun appConfigToJson(config: AppConfig): JSONObject {
     obj.put("pushNotification", config.pushNotification)
     obj.put("playStore", config.playStore)
     obj.put("appStore", config.appStore)
+    obj.put("pro", config.pro)
+
+    obj.put("showOnboarding", config.showOnboarding)
+    val onbArray = JSONArray()
+    for (screen in config.onboarding) {
+        val o = JSONObject()
+        o.put("image", screen.image)
+        o.put("title", screen.title)
+        o.put("description", screen.description)
+        onbArray.put(o)
+    }
+    obj.put("onboarding", onbArray)
+    obj.put("onboardingStyle", config.onboardingStyle)
+    obj.put("onboardingGradient", config.onboardingGradient)
+    obj.put("onboardingTextColor", config.onboardingTextColor)
+    obj.put("onboardingGradientColor", config.onboardingGradientColor)
+    obj.put("onboardingCardColor", config.onboardingCardColor)
+    obj.put("onboardingImageShape", config.onboardingImageShape)
+
+    val plObj = JSONObject()
+    plObj.put("enabled", config.pageLoader.enabled)
+    plObj.put("style", config.pageLoader.style)
+    plObj.put("card", config.pageLoader.card)
+    plObj.put("cardColor", config.pageLoader.cardColor)
+    plObj.put("cardOpacity", config.pageLoader.cardOpacity)
+    plObj.put("cardRadius", config.pageLoader.cardRadius)
+    plObj.put("gap", config.pageLoader.gap)
+    plObj.put("loaderWidth", config.pageLoader.loaderWidth)
+    plObj.put("loaderThickness", config.pageLoader.loaderThickness)
+    obj.put("pageLoader", plObj)
     return obj
 }

@@ -48,6 +48,13 @@
             </intent-filter>
         </activity>
 
+        <!-- Intro/onboarding screens shown before the WebView when enabled. -->
+        <activity
+            android:name=".OnboardingActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Web2App"
+            android:label="${appLabel}" />
+
         <activity
             android:name=".MainActivity"
             android:exported="false"

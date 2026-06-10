@@ -60,6 +60,11 @@
     <string name="label_splash_image">Splash image (1024×1024)</string>
     <string name="splash_image_desc">Splash image</string>
     <string name="btn_choose_image">Choose</string>
+
+    <!-- Onboarding -->
+    <string name="label_onb_image">Screen image</string>
+    <string name="onb_skip">Skip</string>
+    <string name="onb_next">Next</string>
     <string name="label_splash_color">Splash background color</string>
     <string name="hint_hex_color">#FFFFFF</string>
 

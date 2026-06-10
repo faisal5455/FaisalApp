@@ -24,9 +24,17 @@
 
         </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-        <!-- Loading indicator -->
+        <!-- Default loading indicator (used when the page loader isn't configured) -->
         <ProgressBar
             android:id="@+id/progressBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+
+        <!-- Configured page loader is built programmatically into this holder -->
+        <FrameLayout
+            android:id="@+id/pageLoaderHolder"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
