@@ -82,4 +82,9 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.androidx.swiperefreshlayout)
+
+    // Push notifications (OneSignal). FCM credentials live in the OneSignal
+    // dashboard, so no google-services.json is needed in the app. Only activated
+    // at runtime when app_settings.json has pushNotification + an oneSignalAppId.
+    implementation("com.onesignal:OneSignal:5.1.6")
 }

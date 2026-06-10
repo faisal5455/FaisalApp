@@ -41,6 +41,7 @@
     },
     "permissions": [],
     "pushNotification": false,
+    "oneSignalAppId": "",
     "playStore": false,
     "appStore": false
 }

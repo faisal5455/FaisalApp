@@ -46,6 +46,13 @@ class SplashActivity : AppCompatActivity() {
         }
         val splash = config?.splash ?: Splash()
 
+        // When the app is built with push enabled, ask for the Android 13+ notification
+        // permission so OneSignal alerts can be shown. No-op on older Android (granted
+        // at install) and when push is off.
+        if (config?.pushNotification == true && config.oneSignalAppId.isNotBlank()) {
+            requestNotificationPermission()
+        }
+
         val root = findViewById<View>(R.id.splashRoot)
         val image = findViewById<ImageView>(R.id.splashImage)
         val loaderHolder = findViewById<FrameLayout>(R.id.splashLoaderHolder)
@@ -97,6 +104,15 @@ class SplashActivity : AppCompatActivity() {
             startActivity(Intent(this, next).putExtra(MainActivity.EXTRA_APP_ID, appId))
             finish()
         }, holdMs)
+    }
+
+    /** Prompts for POST_NOTIFICATIONS on Android 13+ if not already granted. */
+    private fun requestNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+        val perm = android.Manifest.permission.POST_NOTIFICATIONS
+        if (checkSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(perm), 1001)
+        }
     }
 
     /** Builds a [ProgressBar] for the chosen [style], sized [sizePx] px, or null for "None". */

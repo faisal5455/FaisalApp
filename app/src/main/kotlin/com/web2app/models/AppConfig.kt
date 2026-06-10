@@ -19,6 +19,8 @@ data class AppConfig(
     val tabSettings: TabSettings = TabSettings(),
     val permissions: List<Int> = listOf(),
     val pushNotification: Boolean = false,
+    /** OneSignal App ID used to init push when [pushNotification] is on. */
+    val oneSignalAppId: String = "",
     val playStore: Boolean = false,
     val appStore: Boolean = false,
     /**
@@ -207,6 +209,7 @@ fun parseAppConfig(json: JSONObject): AppConfig {
         tabSettings = tabSettings,
         permissions = permissions,
         pushNotification = json.optBoolean("pushNotification", false),
+        oneSignalAppId = json.optString("oneSignalAppId", ""),
         playStore = json.optBoolean("playStore", false),
         appStore = json.optBoolean("appStore", false),
         pro = json.optBoolean("pro", false),
@@ -273,6 +276,7 @@ fun appConfigToJson(config: AppConfig): JSONObject {
     obj.put("permissions", permsArray)
 
     obj.put("pushNotification", config.pushNotification)
+    obj.put("oneSignalAppId", config.oneSignalAppId)
     obj.put("playStore", config.playStore)
     obj.put("appStore", config.appStore)
     obj.put("pro", config.pro)
