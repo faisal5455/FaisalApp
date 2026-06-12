@@ -41,6 +41,7 @@
         <activity
             android:name=".SplashActivity"
             android:exported="true"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.Web2App"
             android:label="${appLabel}">
             <intent-filter>
@@ -53,12 +54,14 @@
         <activity
             android:name=".OnboardingActivity"
             android:exported="false"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.Web2App"
             android:label="${appLabel}" />
 
         <activity
             android:name=".MainActivity"
             android:exported="false"
+            android:screenOrientation="portrait"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize"
             android:label="${appLabel}" />
