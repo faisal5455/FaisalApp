@@ -19,12 +19,12 @@ val cfgAppName = (appSettings["appName"] as? String)?.takeIf { it.isNotBlank() }
 android {
     // Code/resource package stays fixed; only the installed applicationId varies.
     namespace = "com.web2app"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = cfgPackage
         minSdk = 21
-        targetSdk = 34
+        targetSdk = 36
         versionCode = cfgVersionCode
         versionName = cfgVersionName
 

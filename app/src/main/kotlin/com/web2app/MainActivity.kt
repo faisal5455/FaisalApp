@@ -61,6 +61,7 @@ class MainActivity : AppCompatActivity() {
         permissionsHandler = PermissionsHandler(this)
 
         setContentView(R.layout.activity_main)
+        applySystemBarInsets(R.id.mainRoot, R.id.statusBarScrim)
 
         webView = findViewById(R.id.webView)
         swipeRefresh = findViewById(R.id.swipeRefresh)
