@@ -112,12 +112,4 @@
 
     </FrameLayout>
 
-    <!-- Bottom Navigation — hidden by default; shown if showTabbar=true in app_settings.json -->
-    <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/bottomNav"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurface"
-        android:visibility="gone" />
-
 </LinearLayout>

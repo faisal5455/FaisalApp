@@ -28,8 +28,7 @@ import com.web2app.models.parseAppConfig
 /**
  * Launcher entry point. Reads the app configuration (from the builder's storage when
  * previewing, else assets/app_settings.json), shows the configured splash screen
- * (background colour + image + loader) for a short moment, then opens the onboarding
- * screens (when enabled) or [MainActivity].
+ * (background colour + image + loader) for a short moment, then opens [MainActivity].
  */
 class SplashActivity : AppCompatActivity() {
 
@@ -45,13 +44,6 @@ class SplashActivity : AppCompatActivity() {
             parseAppConfig(readJson(this, "app_settings.json"))
         }
         val splash = config?.splash ?: Splash()
-
-        // When the app is built with push enabled, ask for the Android 13+ notification
-        // permission so OneSignal alerts can be shown. No-op on older Android (granted
-        // at install) and when push is off.
-        if (config?.pushNotification == true && config.oneSignalAppId.isNotBlank()) {
-            requestNotificationPermission()
-        }
 
         val root = findViewById<View>(R.id.splashRoot)
         val image = findViewById<ImageView>(R.id.splashImage)
@@ -99,20 +91,12 @@ class SplashActivity : AppCompatActivity() {
 
         Handler(Looper.getMainLooper()).postDelayed({
             if (isFinishing) return@postDelayed
-            val showOnboarding = config?.showOnboarding == true && config.onboarding.isNotEmpty()
-            val next = if (showOnboarding) OnboardingActivity::class.java else MainActivity::class.java
-            startActivity(Intent(this, next).putExtra(MainActivity.EXTRA_APP_ID, appId))
+            startActivity(
+                Intent(this, MainActivity::class.java)
+                    .putExtra(MainActivity.EXTRA_APP_ID, appId)
+            )
             finish()
         }, holdMs)
-    }
-
-    /** Prompts for POST_NOTIFICATIONS on Android 13+ if not already granted. */
-    private fun requestNotificationPermission() {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
-        val perm = android.Manifest.permission.POST_NOTIFICATIONS
-        if (checkSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(perm), 1001)
-        }
     }
 
     /** Builds a [ProgressBar] for the chosen [style], sized [sizePx] px, or null for "None". */

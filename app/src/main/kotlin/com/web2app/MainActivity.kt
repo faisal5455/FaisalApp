@@ -1,7 +1,6 @@
 package com.web2app
 
 import android.content.Context
-import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.ConnectivityManager
@@ -16,7 +15,6 @@ import android.widget.FrameLayout
 import android.webkit.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.web2app.data.AppRepository
 import com.web2app.handlers.PermissionsHandler
 import com.web2app.models.parseAppConfig
@@ -26,7 +24,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var progressBar: View
-    private lateinit var bottomNav: BottomNavigationView
     private lateinit var noInternetView: View
 
     /** Holder for the configured page loader; null/false means use the default spinner. */
@@ -36,8 +33,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var permissionsHandler: PermissionsHandler
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
-
-    private var selectedTabIndex = 0
 
     companion object {
         const val EXTRA_APP_ID = "extra_app_id"
@@ -62,11 +57,11 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_main)
         applySystemBarInsets(R.id.mainRoot, R.id.statusBarScrim)
+        applyStatusBarColor()
 
         webView = findViewById(R.id.webView)
         swipeRefresh = findViewById(R.id.swipeRefresh)
         progressBar = findViewById(R.id.progressBar)
-        bottomNav = findViewById(R.id.bottomNav)
         noInternetView = findViewById(R.id.noInternetView)
 
         // Show the preview close button (faint eye behind a clear X) only when
@@ -78,7 +73,6 @@ class MainActivity : AppCompatActivity() {
 
         setupPageLoader()
         setupWebView()
-        setupBottomNav()
         setupConnectivity()
         requestConfiguredPermissions()
 
@@ -101,11 +95,14 @@ class MainActivity : AppCompatActivity() {
         val holder = findViewById<FrameLayout>(R.id.pageLoaderHolder)
         pageLoaderHolder = holder
         val pl = appConfig.pageLoader
+        val theme = safeParseColor(appConfig.themeColor, DEFAULT_THEME)
         if (!pl.enabled) {
             useCustomPageLoader = false
+            // Tint the default spinner with the configured theme colour too.
+            (progressBar as? android.widget.ProgressBar)?.indeterminateTintList =
+                android.content.res.ColorStateList.valueOf(theme)
             return
         }
-        val theme = safeParseColor(appConfig.themeColor, DEFAULT_THEME)
         val icon = Base64ImageUtil.base64ToBitmap(appConfig.appIcon)
         val opts = PageLoaderViews.Opts(
             card = pl.card,
@@ -219,93 +216,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ─── Bottom Navigation ─────────────────────────────────────────────────────
-
-    private fun setupBottomNav() {
-        if (!appConfig.showTabbar || appConfig.tabbars.isEmpty()) {
-            bottomNav.visibility = View.GONE
-            return
-        }
-
-        bottomNav.visibility = View.VISIBLE
-
-        // Apply colours from tabSettings (mirrors BottomNavigationBar composable)
-        val activeColor = safeParseColor(appConfig.tabSettings.tabActiveColor, Color.BLUE)
-        val inactiveColor = safeParseColor(appConfig.tabSettings.tabInactiveColor, Color.GRAY)
-        val barColor = safeParseColor(appConfig.tabSettings.tabBarColor, Color.WHITE)
-
-        bottomNav.setBackgroundColor(barColor)
-
-        val colorStateList = ColorStateList(
-            arrayOf(
-                intArrayOf(android.R.attr.state_checked),
-                intArrayOf(-android.R.attr.state_checked)
-            ),
-            intArrayOf(activeColor, inactiveColor)
-        )
-        bottomNav.itemIconTintList = colorStateList
-        bottomNav.itemTextColor = colorStateList
-        bottomNav.setItemTextAppearanceActive(R.style.TextAppearance_Web2App_Tab)
-        bottomNav.setItemTextAppearanceInactive(R.style.TextAppearance_Web2App_Tab)
-
-        // Match the classic (shorter) bottom bar: drop the Material3 active-indicator
-        // pill, which otherwise makes the bar noticeably taller, and use a compact
-        // fixed height (a touch shorter when titles are hidden).
-        bottomNav.isItemActiveIndicatorEnabled = false
-        val showTitles = appConfig.tabSettings.showTitles
-        bottomNav.labelVisibilityMode = if (showTitles) {
-            com.google.android.material.bottomnavigation.BottomNavigationView.LABEL_VISIBILITY_LABELED
-        } else {
-            com.google.android.material.bottomnavigation.BottomNavigationView.LABEL_VISIBILITY_UNLABELED
-        }
-        val barHeightDp = if (showTitles) 60 else 54
-        bottomNav.layoutParams = bottomNav.layoutParams.apply {
-            height = (barHeightDp * resources.displayMetrics.density).toInt()
-        }
-
-        // Build menu items dynamically from JSON (Base64 icons → BitmapDrawable)
-        val menu = bottomNav.menu
-        menu.clear()
-
-        // 3px gap between icon and title (only meaningful when titles are shown).
-        val iconLabelGap = if (showTitles) 3 else 0
-        for ((index, tab) in appConfig.tabbars.withIndex()) {
-            val item = menu.add(0, index, index, tab.title)
-            if (tab.icon.isNotBlank()) {
-                val res = MaterialIcons.resFor(tab.icon)
-                val icon: android.graphics.drawable.Drawable? = when {
-                    LucideIcons.isLucide(tab.icon) -> {
-                        val px = (24 * resources.displayMetrics.density).toInt()
-                        LucideIcons.drawable(
-                            this, LucideIcons.name(tab.icon), px, android.graphics.Color.BLACK
-                        )
-                    }
-                    res != null -> androidx.core.content.ContextCompat.getDrawable(this, res)
-                    else -> Base64ImageUtil.base64ToBitmapDrawable(this, tab.icon)
-                }
-                item.icon = icon?.let {
-                    android.graphics.drawable.InsetDrawable(it, 0, 0, 0, iconLabelGap)
-                }
-            }
-        }
-
-        // Select first tab
-        bottomNav.selectedItemId = 0
-
-        bottomNav.setOnItemSelectedListener { item ->
-            selectedTabIndex = item.itemId
-            loadCurrentUrl()
-            true
-        }
-    }
-
     private fun loadCurrentUrl() {
-        val url = if (appConfig.showTabbar && appConfig.tabbars.isNotEmpty()) {
-            appConfig.tabbars.getOrNull(selectedTabIndex)?.url ?: appConfig.websiteURL
-        } else {
-            appConfig.websiteURL
-        }
-        webView.loadUrl(url)
+        webView.loadUrl(appConfig.websiteURL)
     }
 
     // ─── Network Connectivity (mirrors connectivityState / observeConnectivityAsFlow) ──
@@ -383,6 +295,19 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             default
         }
+    }
+
+    /**
+     * Paints the status-bar scrim with the configured theme colour (the layout's
+     * hardcoded colour was ignoring the setting), and flips the status-bar icons to
+     * dark on a light theme for legibility.
+     */
+    private fun applyStatusBarColor() {
+        val theme = safeParseColor(appConfig.themeColor, DEFAULT_THEME)
+        findViewById<View>(R.id.statusBarScrim).setBackgroundColor(theme)
+        val isLight = androidx.core.graphics.ColorUtils.calculateLuminance(theme) > 0.5
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+            .isAppearanceLightStatusBars = isLight
     }
 
     // ─── Lifecycle ─────────────────────────────────────────────────────────────
