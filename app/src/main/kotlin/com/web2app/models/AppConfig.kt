@@ -44,7 +44,13 @@ data class AppConfig(
     /** Onboarding image shape: 0 = Circle, 1 = Rounded (15dp), 2 = None. */
     val onboardingImageShape: Int = 0,
     /** Loader shown while web pages load inside the WebView. */
-    val pageLoader: PageLoader = PageLoader()
+    val pageLoader: PageLoader = PageLoader(),
+    /** Swipe-down-to-refresh gesture on the WebView (off by default). */
+    val pullRefresh: Boolean = false,
+    /** Floating "Made with" badge over the WebView. On by default; false removes it entirely. */
+    val watermark: Boolean = true,
+    /** Immersive full screen: hides the status + navigation bars (swipe to reveal). */
+    val fullScreen: Boolean = false
 )
 
 data class PageLoader(
@@ -221,7 +227,10 @@ fun parseAppConfig(json: JSONObject): AppConfig {
         onboardingGradientColor = json.optString("onboardingGradientColor", "#5B5BD6"),
         onboardingCardColor = json.optString("onboardingCardColor", "#FFFFFF"),
         onboardingImageShape = json.optInt("onboardingImageShape", 0),
-        pageLoader = pageLoader
+        pageLoader = pageLoader,
+        pullRefresh = json.optBoolean("pullRefresh", false),
+        watermark = json.optBoolean("watermark", true),
+        fullScreen = json.optBoolean("fullScreen", false)
     )
 }
 
@@ -309,5 +318,8 @@ fun appConfigToJson(config: AppConfig): JSONObject {
     plObj.put("loaderWidth", config.pageLoader.loaderWidth)
     plObj.put("loaderThickness", config.pageLoader.loaderThickness)
     obj.put("pageLoader", plObj)
+    obj.put("pullRefresh", config.pullRefresh)
+    obj.put("watermark", config.watermark)
+    obj.put("fullScreen", config.fullScreen)
     return obj
 }

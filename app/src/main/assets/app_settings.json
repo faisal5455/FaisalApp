@@ -43,5 +43,8 @@
     "pushNotification": false,
     "oneSignalAppId": "",
     "playStore": false,
-    "appStore": false
+    "appStore": false,
+    "watermark": true,
+    "pullRefresh": false,
+    "fullScreen": false
 }

@@ -68,8 +68,14 @@ class MainActivity : AppCompatActivity() {
         permissionsHandler = PermissionsHandler(this)
 
         setContentView(R.layout.activity_main)
-        applySystemBarInsets(R.id.mainRoot, R.id.statusBarScrim)
-        applyStatusBarColor()
+        if (appConfig.fullScreen) {
+            // No system bars to sit under, so skip the insets/scrim entirely.
+            enterFullScreen()
+            findViewById<View>(R.id.statusBarScrim).visibility = View.GONE
+        } else {
+            applySystemBarInsets(R.id.mainRoot, R.id.statusBarScrim)
+            applyStatusBarColor()
+        }
 
         webView = findViewById(R.id.webView)
         swipeRefresh = findViewById(R.id.swipeRefresh)
@@ -89,6 +95,7 @@ class MainActivity : AppCompatActivity() {
         requestConfiguredPermissions()
         setupWatermark()
 
+        swipeRefresh.isEnabled = appConfig.pullRefresh
         swipeRefresh.setOnRefreshListener { webView.reload() }
 
         if (savedInstanceState != null) {
@@ -98,6 +105,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Re-hide the bars after they were revealed by a swipe or another window. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && appConfig.fullScreen) enterFullScreen()
+    }
+
     // ─── Watermark ────────────────────────────────────────────────────────────
 
     /**
@@ -105,7 +118,15 @@ class MainActivity : AppCompatActivity() {
      * plays a subtle slide-up + fade-in entrance animation after a short delay.
      */
     private fun setupWatermark() {
-        watermarkBadge = findViewById(R.id.watermarkBadge)
+        val badge = findViewById<LinearLayout>(R.id.watermarkBadge)
+
+        // "watermark": false in app_settings.json strips the badge from the view tree.
+        if (!appConfig.watermark) {
+            (badge?.parent as? ViewGroup)?.removeView(badge)
+            watermarkBadge = null
+            return
+        }
+        watermarkBadge = badge
 
         // Clip the icon ImageView into a circle using ViewOutlineProvider
         val iconView = findViewById<ImageView>(R.id.watermarkIcon)
